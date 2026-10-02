@@ -15,8 +15,12 @@
         .cell.x { color: #ff4757; }
         .cell.o { color: #1e90ff; }
         .status { margin-top: 20px; font-size: 1.1rem; font-weight: bold; text-align: center; }
-        button { margin-top: 20px; padding: 10px 20px; font-size: 1rem; background-color: #1e90ff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: #0066cc; }
+        .button-group { display: flex; gap: 10px; margin-top: 20px; }
+        button { padding: 10px 20px; font-size: 1rem; border: none; border-radius: 5px; cursor: pointer; color: white; }
+        .btn-primary { background-color: #1e90ff; }
+        .btn-primary:hover { background-color: #0066cc; }
+        .btn-danger { background-color: #ff4757; }
+        .btn-danger:hover { background-color: #cc0000; }
         .hidden { display: none; }
     </style>
 </head>
@@ -24,7 +28,7 @@
     <h1>Tic-Tac-Toe Online</h1>
     <div class="room-input" id="roomInput">
         <input type="text" id="roomId" placeholder="Kode Room" maxlength="6">
-        <button onclick="joinRoom()">Masuk</button>
+        <button class="btn-primary" onclick="joinRoom()">Masuk</button>
     </div>
     <div class="board hidden" id="board">
         <div class="cell" data-index="0"></div>
@@ -38,10 +42,14 @@
         <div class="cell" data-index="8"></div>
     </div>
     <div class="status hidden" id="status"></div>
+    <div class="button-group hidden" id="buttonGroup">
+        <button class="btn-primary" id="restartBtn" onclick="restartGame()">Main Lagi</button>
+        <button class="btn-danger" id="leaveBtn" onclick="leaveRoom()">Keluar</button>
+    </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, remove, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAKtBWjahaI6VEYqbgWB6sqUBwcOBeBlcI",
@@ -60,10 +68,12 @@
         let roomId = "";
         let mySymbol = "X"; 
         let isMyTurn = false;
+        let gameActive = false;
 
         const roomInputDiv = document.getElementById("roomInput");
         const boardDiv = document.getElementById("board");
         const statusDisplay = document.getElementById("status");
+        const buttonGroup = document.getElementById("buttonGroup");
         const cells = document.querySelectorAll(".cell");
 
         window.joinRoom = function() {
@@ -73,19 +83,21 @@
             roomInputDiv.classList.add("hidden");
             boardDiv.classList.remove("hidden");
             statusDisplay.classList.remove("hidden");
+            buttonGroup.classList.remove("hidden");
+            gameActive = true;
 
             const roomRef = ref(db, 'rooms/' + roomId);
             
+            // Auto-Cleanup: Jika koneksi terputus, hapus room ini dari database
+            onDisconnect(roomRef).remove();
+
             // Cek apakah room sudah ada
             onValue(roomRef, (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
-                    // Room sudah ada
                     if (data.pemainX && data.pemainO) {
                         alert("Room ini sudah penuh!");
-                        roomInputDiv.classList.remove("hidden");
-                        boardDiv.classList.add("hidden");
-                        statusDisplay.classList.add("hidden");
+                        leaveRoom();
                         return;
                     }
                     if (!data.pemainX) {
@@ -98,7 +110,6 @@
                     updateBoard(data.papan);
                     checkGameStatus(data);
                 } else {
-                    // Room baru, kita jadi X dan buat room
                     mySymbol = "X";
                     set(roomRef, {
                         papan: ["", "", "", "", "", "", "", "", ""],
@@ -109,7 +120,6 @@
                 }
             }, { onlyOnce: true });
 
-            // Mulai mendengarkan perubahan data secara real-time
             listenToRoom();
         };
 
@@ -144,33 +154,36 @@
             ];
 
             let roundWon = false;
-            let pemenang = ""; // Variabel untuk menyimpan simbol pemenang
+            let pemenang = "";
 
             for (let i = 0; i < winningConditions.length; i++) {
                 const [a, b, c] = winningConditions[i];
                 if (papan[a] && papan[a] === papan[b] && papan[a] === papan[c]) {
                     roundWon = true;
-                    pemenang = papan[a]; // Ambil simbol yang menang (X atau O)
+                    pemenang = papan[a];
                     break;
                 }
             }
 
             if (roundWon) {
-                statusDisplay.textContent = `Pemain ${pemenang} Menang!`; // Gunakan variabel pemenang
+                statusDisplay.textContent = `Pemain ${pemenang} Menang!`;
+                gameActive = false;
                 return;
             }
 
             if (!papan.includes("")) {
                 statusDisplay.textContent = "Seri!";
+                gameActive = false;
                 return;
             }
 
+            gameActive = true;
             isMyTurn = (giliran === mySymbol);
             statusDisplay.textContent = isMyTurn ? `Giliran Kamu (${mySymbol})` : `Giliran Lawan (${giliran})`;
         }
 
         function handleCellClick(e) {
-            if (!isMyTurn) return;
+            if (!isMyTurn || !gameActive) return;
 
             const cell = e.target;
             const index = parseInt(cell.getAttribute("data-index"));
@@ -192,6 +205,28 @@
                 }
             }, { onlyOnce: true });
         }
+
+        window.restartGame = function() {
+            const roomRef = ref(db, 'rooms/' + roomId);
+            set(roomRef, {
+                papan: ["", "", "", "", "", "", "", "", ""],
+                giliran: "X",
+                pemainX: true,
+                pemainO: true // Biarkan true agar tidak dianggap keluar
+            });
+        };
+
+        window.leaveRoom = function() {
+            const roomRef = ref(db, 'rooms/' + roomId);
+            remove(roomRef).then(() => {
+                // Reset tampilan ke awal
+                roomInputDiv.classList.remove("hidden");
+                boardDiv.classList.add("hidden");
+                statusDisplay.classList.add("hidden");
+                buttonGroup.classList.add("hidden");
+                document.getElementById("roomId").value = "";
+            });
+        };
 
         cells.forEach(cell => cell.addEventListener("click", handleCellClick));
     </script>
