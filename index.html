@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe Online</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { margin-bottom: 10px; font-size: 1.5rem; }
+        .room-input {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+            font-size: 1rem;
+            width: 150px;
+            text-align: center;
+        }
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 90px);
+            grid-template-rows: repeat(3, 90px);
+            gap: 5px;
+        }
+        .cell {
+            background-color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: background 0.2s;
+        }
+        .cell:hover { background-color: #444; }
+        .cell.x { color: #ff4757; }
+        .cell.o { color: #1e90ff; }
+        .status {
+            margin-top: 20px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            background-color: #1e90ff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #0066cc; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>Tic-Tac-Toe Online</h1>
+    
+    <!-- Input Room ID -->
+    <div class="room-input" id="roomInput">
+        <input type="text" id="roomId" placeholder="Kode Room" maxlength="6">
+        <button onclick="joinRoom()">Masuk</button>
+    </div>
+
+    <!-- Papan Game -->
+    <div class="board hidden" id="board">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+    <div class="status hidden" id="status"></div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Import Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        // Konfigurasi Firebase kamu
+        const firebaseConfig = {
+            apiKey: "AIzaSyAKtBWjahaI6VEYqbgWB6sqUBwcOBeBlcI",
+            authDomain: "tic-tac-toe-e2a08.firebaseapp.com",
+            databaseURL: "https://tic-tac-toe-e2a08-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "tic-tac-toe-e2a08",
+            storageBucket: "tic-tac-toe-e2a08.firebasestorage.app",
+            messagingSenderId: "452204906054",
+            appId: "1:452204906054:web:5a27c344abebb752fb6c47",
+            measurementId: "G-DTB69KLFQ6"
+        };
+
+        // Inisialisasi Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let roomId = "";
+        let mySymbol = "X"; // Default
+        let isMyTurn = false;
+
+        const roomInputDiv = document.getElementById("roomInput");
+        const boardDiv = document.getElementById("board");
+        const statusDisplay = document.getElementById("status");
+        const cells = document.querySelectorAll(".cell");
+
+        window.joinRoom = function() {
+            roomId = document.getElementById("roomId").value.trim().toUpperCase();
+            if (roomId === "") return alert("Masukkan kode room!");
+
+            // Sembunyikan input, tampilkan papan
+            roomInputDiv.classList.add("hidden");
+            boardDiv.classList.remove("hidden");
+            statusDisplay.classList.remove("hidden");
+
+            // Cek apakah room sudah ada di database
+            const roomRef = ref(db, 'rooms/' + roomId);
+            onValue(roomRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    // Room sudah ada, kita jadi pemain O
+                    mySymbol = "O";
+                    updateBoard(data.papan);
+                    checkGameStatus(data);
+                } else {
+                    // Room baru, kita jadi pemain X dan buat room
+                    mySymbol = "X";
+                    set(roomRef, {
+                        papan: ["", "", "", "", "", "", "", "", ""],
+                        giliran: "X"
+                    });
+                }
+            });
+        };
+
+        function updateBoard(papan) {
+            cells.forEach((cell, index) => {
+                cell.textContent = papan[index];
+                cell.classList.remove("x", "o");
+                if (papan[index] === "X") cell.classList.add("x");
+                if (papan[index] === "O") cell.classList.add("o");
+            });
+        }
+
+        function checkGameStatus(data) {
+            const papan = data.papan;
+            const giliran = data.giliran;
+            
+            // Cek menang
+            const winningConditions = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8],
+                [0, 3, 6], [1, 4, 7], [2, 5, 8],
+                [0, 4, 8], [2, 4, 6]
+            ];
+
+            let roundWon = false;
+            for (let i = 0; i < winningConditions.length; i++) {
+                const [a, b, c] = winningConditions[i];
+                if (papan[a] && papan[a] === papan[b] && papan[a] === papan[c]) {
+                    roundWon = true;
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                statusDisplay.textContent = `Pemain ${giliran} Menang!`;
+                return;
+            }
+
+            if (!papan.includes("")) {
+                statusDisplay.textContent = "Seri!";
+                return;
+            }
+
+            isMyTurn = (giliran === mySymbol);
+            statusDisplay.textContent = isMyTurn ? `Giliran Kamu (${mySymbol})` : `Giliran Lawan (${giliran})`;
+        }
+
+        function handleCellClick(e) {
+            if (!isMyTurn) return; // Bukan giliran kita
+
+            const cell = e.target;
+            const index = parseInt(cell.getAttribute("data-index"));
+
+            const roomRef = ref(db, 'rooms/' + roomId);
+            onValue(roomRef, (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.papan[index] === "") {
+                    // Update papan di database
+                    const newPapan = [...data.papan];
+                    newPapan[index] = mySymbol;
+                    const nextGiliran = mySymbol === "X" ? "O" : "X";
+                    
+                    set(roomRef, {
+                        papan: newPapan,
+                        giliran: nextGiliran
+                    });
+                }
+            }, { onlyOnce: true });
+        }
+
+        cells.forEach(cell => cell.addEventListener("click", handleCellClick));
+    </script>
+</body>
+</html>
