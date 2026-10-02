@@ -144,16 +144,19 @@
             ];
 
             let roundWon = false;
+            let pemenang = ""; // Variabel untuk menyimpan simbol pemenang
+
             for (let i = 0; i < winningConditions.length; i++) {
                 const [a, b, c] = winningConditions[i];
                 if (papan[a] && papan[a] === papan[b] && papan[a] === papan[c]) {
                     roundWon = true;
+                    pemenang = papan[a]; // Ambil simbol yang menang (X atau O)
                     break;
                 }
             }
 
             if (roundWon) {
-                statusDisplay.textContent = `Pemain ${giliran} Menang!`;
+                statusDisplay.textContent = `Pemain ${pemenang} Menang!`; // Gunakan variabel pemenang
                 return;
             }
 
